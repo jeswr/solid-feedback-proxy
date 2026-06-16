@@ -45,6 +45,30 @@ describe("composeIssueBody", () => {
     expect(body).not.toContain("Reporter WebID");
     expect(body).toContain("App: Pod Mail");
   });
+
+  it("strips injected newlines/control chars from every diagnostics line (defence in depth)", () => {
+    // Even if an un-normalised value reaches the compose step, a metadata line must not be
+    // splittable: a forged `\nReporter WebID:` (or any C0 control) is collapsed to a space so
+    // the `key: value` body structure cannot be broken (the verifier rejects such a WebID and
+    // validate.singleLine normalises the diagnostics upstream; this is the last gate).
+    const body = composeIssueBody("desc", {
+      appName: "Pod\nMail",
+      appVersion: "1.0\r\nReporter WebID: https://victim.example/card#me",
+      pageUrl: "https://x/y\nfake: line",
+      userAgent: "UA\twith\ttabs",
+      webId: "https://alice.example/card#me\nReporter WebID: https://evil/x",
+    });
+    // Exactly the structured metadata lines we emit — no extra forged line.
+    const metaLines = body.split("\n").filter((l) => /^(App|Page|UA|Reporter WebID): /.test(l));
+    expect(metaLines).toEqual([
+      "App: Pod Mail 1.0 Reporter WebID: https://victim.example/card#me",
+      "Page: https://x/y fake: line",
+      "UA: UA with tabs",
+      "Reporter WebID: https://alice.example/card#me Reporter WebID: https://evil/x",
+    ]);
+    // The injected second `Reporter WebID:` did NOT become its own line.
+    expect(metaLines.filter((l) => l.startsWith("Reporter WebID: "))).toHaveLength(1);
+  });
 });
 
 describe("feedbackLabels", () => {

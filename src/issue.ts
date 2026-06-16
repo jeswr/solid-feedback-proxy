@@ -32,26 +32,64 @@ export function composeIssueTitle(category: FeedbackCategory, description: strin
 }
 
 /**
+ * Defence-in-depth: collapse any ASCII control char (C0 0x00–0x1F incl. CR/LF/TAB, and
+ * DEL 0x7F) in a value destined for a SINGLE metadata line down to a space, then trim.
+ * The diagnostics fields are already newline-stripped upstream (`validate.singleLine`) and
+ * the WebID is control-char-REJECTED in the verifier (`verify.extractWebId`), so by the
+ * time a value reaches here it is already single-line — but the compose step is the last
+ * gate before the bytes hit the issue body, so it MUST NOT itself be the place an injected
+ * newline could break the `key: value` line structure (e.g. forge a second `Reporter
+ * WebID:` line). Enforcing the invariant here makes a metadata line structurally
+ * injection-proof regardless of any upstream caller (roborev MEDIUM). Built char-by-char
+ * to avoid a regex literal containing control characters.
+ */
+function metaLineValue(value: string): string {
+  let out = "";
+  let lastWasSpace = false;
+  for (const ch of value) {
+    const code = ch.codePointAt(0) ?? 0;
+    const isControl = code < 0x20 || code === 0x7f;
+    if (isControl || ch === " ") {
+      if (!lastWasSpace) {
+        out += " ";
+        lastWasSpace = true;
+      }
+    } else {
+      out += ch;
+      lastWasSpace = false;
+    }
+  }
+  return out.trim();
+}
+
+/**
  * Compose the issue body: the user's description, then a diagnostics block. The
  * `Reporter WebID` line is emitted ONLY when `diagnostics.webId` is set (consent).
  * Mirrors the button's composeIssueBody. Never includes tokens/secrets.
+ *
+ * The description is the reporter's own free-text prose and is intentionally left
+ * MULTI-LINE (it is the issue body Markdown). Every structured DIAGNOSTICS field, by
+ * contrast, goes onto a single `key: value` line, so each is passed through
+ * {@link metaLineValue} as the final-gate guarantee that no token/user-derived field can
+ * carry a newline that breaks the body structure (defence in depth — upstream already
+ * normalises/rejects, this is the last line of defence at the compose step).
  */
 export function composeIssueBody(description: string, diagnostics: FeedbackDiagnostics): string {
   const lines: string[] = [];
   lines.push(description.trim());
   lines.push("");
   lines.push("---");
-  const version = diagnostics.appVersion ? ` ${diagnostics.appVersion}` : "";
-  lines.push(`App: ${diagnostics.appName}${version}`);
+  const version = diagnostics.appVersion ? ` ${metaLineValue(diagnostics.appVersion)}` : "";
+  lines.push(`App: ${metaLineValue(diagnostics.appName)}${version}`);
   if (diagnostics.pageUrl) {
-    lines.push(`Page: ${diagnostics.pageUrl}`);
+    lines.push(`Page: ${metaLineValue(diagnostics.pageUrl)}`);
   }
   if (diagnostics.userAgent) {
-    lines.push(`UA: ${diagnostics.userAgent}`);
+    lines.push(`UA: ${metaLineValue(diagnostics.userAgent)}`);
   }
   // PRIVACY: only present when the reporter consented (caller sets webId only then).
   if (diagnostics.webId) {
-    lines.push(`Reporter WebID: ${diagnostics.webId}`);
+    lines.push(`Reporter WebID: ${metaLineValue(diagnostics.webId)}`);
   }
   return lines.join("\n");
 }
