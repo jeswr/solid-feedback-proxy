@@ -1,0 +1,23 @@
+{
+  "$schema": "https://raw.githubusercontent.com/jeswr/full-solid-ecosystem/main/tracking/schema/suite.schema.json",
+  "id": "solid-feedback-proxy",
+  "kind": "service",
+  "name": "Solid Feedback Proxy",
+  "repo": "https://github.com/jeswr/solid-feedback-proxy",
+  "category": "infrastructure",
+  "maturity": "alpha",
+  "visibility": "public",
+  "stack": {
+    "language": "TypeScript",
+    "runtime": "Node >=20",
+    "hosting": "Vercel serverless function (api/feedback.ts)",
+    "auth": "Solid-OIDC + RFC 9449 DPoP token verification (issuer-agnostic, asymmetric-only)",
+    "crypto": "jose + oauth4webapi (nothing hand-rolled)",
+    "outbound": "GitHub REST issues API (the only outbound call)",
+    "modules": "ESM",
+    "test": "vitest",
+    "lint": "@biomejs/biome"
+  },
+  "dependsOn": [],
+  "federation": null
+}
