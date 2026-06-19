@@ -27,7 +27,7 @@
 import { createHmac } from "node:crypto";
 import type { ProxyConfig } from "./config.js";
 import { corsHeaders } from "./cors.js";
-import { createIssue, type FetchLike, GitHubApiError } from "./github.js";
+import { createIssue, type FetchLike } from "./github.js";
 import { composeIssueBody, composeIssueTitle, feedbackLabels } from "./issue.js";
 import type { RateLimiter } from "./rateLimit.js";
 import type { FeedbackSubmitResult } from "./types.js";
@@ -213,11 +213,11 @@ export async function handleFeedback(req: ProxyRequest, deps: HandlerDeps): Prom
       deps.fetchImpl,
     );
     return respond(200, result);
-  } catch (error) {
-    if (error instanceof GitHubApiError) {
-      // 502: the upstream (GitHub) failed; the request itself was valid + authorized.
-      return respond(502, { error: "Could not create the issue upstream." });
-    }
+  } catch {
+    // ANY create failure → 502: the upstream (GitHub) failed; the request itself was valid
+    // and authorized. `createIssue` throws {@link GitHubApiError} for an upstream/network
+    // failure, but any other thrown error gets the same generic 502 — we never echo the
+    // upstream detail or the token to the client (which is why both map identically).
     return respond(502, { error: "Could not create the issue upstream." });
   }
 }
