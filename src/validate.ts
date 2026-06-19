@@ -6,6 +6,7 @@
 // nothing implicitly, cap lengths, and require `description` to be non-empty.
 
 import type { ProxyConfig } from "./config.js";
+import { collapseToSingleLine } from "./text.js";
 import { FEEDBACK_CATEGORIES, type FeedbackCategory, type FeedbackPayload } from "./types.js";
 
 /** Thrown on a malformed/oversized/empty request body — surfaces as 400. */
@@ -47,33 +48,12 @@ function optionalString(value: unknown, field: string, max: number): string | un
   return s.length > 0 ? s : undefined;
 }
 
-/**
- * Collapse newlines + other control characters in a single-line diagnostic field to
- * spaces (and trim). This is the anti-injection control (roborev MEDIUM): without it a
- * caller could embed `\nReporter WebID: …` (or any forged metadata line) in `appName` /
- * `appVersion` / `pageUrl` / `userAgent` and spoof the diagnostics block — these fields
- * are single-line by nature, so stripping line breaks is both correct and load-bearing.
- */
-function singleLine(value: string): string {
-  // Drop ASCII control chars (incl. CR/LF/TAB, code points 0-31) and DEL (127); collapse
-  // surrounding whitespace. Building char-by-char avoids a regex literal with control chars.
-  let out = "";
-  let lastWasSpace = false;
-  for (const ch of value) {
-    const code = ch.codePointAt(0) ?? 0;
-    const isControl = code < 0x20 || code === 0x7f;
-    if (isControl || ch === " ") {
-      if (!lastWasSpace) {
-        out += " ";
-        lastWasSpace = true;
-      }
-    } else {
-      out += ch;
-      lastWasSpace = false;
-    }
-  }
-  return out.trim();
-}
+// The anti-injection control (roborev MEDIUM) — collapsing newlines/control chars in a
+// single-line diagnostic field — lives in the shared `src/text.ts`
+// ({@link collapseToSingleLine}): without it a caller could embed `\nReporter WebID: …` (or
+// any forged metadata line) in `appName` / `appVersion` / `pageUrl` / `userAgent` and spoof
+// the diagnostics block. These fields are single-line by nature, so stripping line breaks
+// is both correct and load-bearing.
 
 /** As {@link optionalString}, but normalised to a single line (no injectable line breaks). */
 function optionalSingleLine(value: unknown, field: string, max: number): string | undefined {
@@ -81,7 +61,7 @@ function optionalSingleLine(value: unknown, field: string, max: number): string 
   if (s === undefined) {
     return undefined;
   }
-  const collapsed = singleLine(s);
+  const collapsed = collapseToSingleLine(s);
   return collapsed.length > 0 ? collapsed : undefined;
 }
 
@@ -128,7 +108,9 @@ export function validatePayload(raw: unknown, config: ProxyConfig): FeedbackPayl
     throw new ValidationError(`Field "diagnostics" must be an object.`);
   }
   const d = raw.diagnostics;
-  const appName = singleLine(requireString(d.appName, "diagnostics.appName", LIMITS.appName));
+  const appName = collapseToSingleLine(
+    requireString(d.appName, "diagnostics.appName", LIMITS.appName),
+  );
   if (appName.length === 0) {
     throw new ValidationError(`Field "diagnostics.appName" must not be empty.`);
   }

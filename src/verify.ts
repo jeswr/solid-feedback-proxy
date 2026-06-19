@@ -25,6 +25,7 @@
 
 import * as oauth from "oauth4webapi";
 import { InProcessReplayStore, type ReplayStore } from "./replayStore.js";
+import { hasControlChar } from "./text.js";
 
 /** Asymmetric signature algorithms accepted for BOTH the access token and the DPoP proof. */
 const SIGNING_ALGS = [
@@ -318,12 +319,13 @@ export class DpopTokenVerifier {
     if (typeof raw !== "string" || raw.length === 0) {
       throw new TokenVerifyError(`Token is missing the '${this.options.webidClaim}' claim.`);
     }
-    // Reject ASCII control characters (CR/LF/TAB/…) BEFORE parsing. `new URL()` silently
-    // strips tab/newline and trims leading/trailing C0 controls, so a claim like
-    // "https://x/y\nReporter WebID: evil" would otherwise PASS validation and then be
-    // written verbatim into the issue's diagnostics block — a metadata-line injection. The
-    // verified WebID is the one trusted field that reaches the body unmodified, so it must
-    // be control-char-free (roborev MEDIUM). A real WebID never contains control chars.
+    // Reject ASCII control characters (CR/LF/TAB/…) BEFORE parsing — via the shared
+    // `hasControlChar` (src/text.ts). `new URL()` silently strips tab/newline and trims
+    // leading/trailing C0 controls, so a claim like "https://x/y\nReporter WebID: evil"
+    // would otherwise PASS validation and then be written verbatim into the issue's
+    // diagnostics block — a metadata-line injection. The verified WebID is the one trusted
+    // field that reaches the body unmodified, so it must be control-char-free (roborev
+    // MEDIUM). A real WebID never contains control chars.
     if (hasControlChar(raw)) {
       throw new TokenVerifyError("WebID claim must not contain control characters.");
     }
@@ -373,20 +375,4 @@ export class DpopTokenVerifier {
 /** A short, non-sensitive reason string from an unknown error. */
 function reason(error: unknown): string {
   return error instanceof Error ? error.message : "unknown error";
-}
-
-/**
- * Whether a string contains any ASCII control character (C0 range 0x00–0x1F or DEL 0x7F),
- * which includes CR/LF/TAB. Used to reject a WebID claim that could carry an injected
- * newline (the verified WebID is written into the issue body, so it must be single-line).
- * Built char-by-char to avoid a regex literal containing control characters.
- */
-function hasControlChar(value: string): boolean {
-  for (const ch of value) {
-    const code = ch.codePointAt(0) ?? 0;
-    if (code < 0x20 || code === 0x7f) {
-      return true;
-    }
-  }
-  return false;
 }

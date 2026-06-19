@@ -21,6 +21,7 @@ export {
 export { composeIssueBody, composeIssueTitle, feedbackLabels } from "./issue.js";
 export { RateLimiter, type RateLimitResult } from "./rateLimit.js";
 export { InProcessReplayStore, type ReplayStore } from "./replayStore.js";
+export { collapseToSingleLine, hasControlChar, isControlCodePoint } from "./text.js";
 export {
   FEEDBACK_CATEGORIES,
   type FeedbackCategory,
