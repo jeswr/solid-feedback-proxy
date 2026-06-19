@@ -50,7 +50,8 @@ describe("composeIssueBody", () => {
     // Even if an un-normalised value reaches the compose step, a metadata line must not be
     // splittable: a forged `\nReporter WebID:` (or any C0 control) is collapsed to a space so
     // the `key: value` body structure cannot be broken (the verifier rejects such a WebID and
-    // validate.singleLine normalises the diagnostics upstream; this is the last gate).
+    // validatePayload collapses the diagnostics upstream via text.collapseToSingleLine; this
+    // is the last gate).
     const body = composeIssueBody("desc", {
       appName: "Pod\nMail",
       appVersion: "1.0\r\nReporter WebID: https://victim.example/card#me",

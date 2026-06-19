@@ -72,7 +72,7 @@ server misconfigured.
 ### Wiring the button to this proxy
 
 ```ts
-import { FeedbackButton, type FeedbackPayload, type FeedbackSubmitResult } from "@solid/app-shell";
+import { FeedbackButton, type FeedbackPayload, type FeedbackSubmitResult } from "@jeswr/app-shell";
 
 async function submit(payload: FeedbackPayload): Promise<FeedbackSubmitResult> {
   // `authedFetch` is the app's DPoP-bound fetch (the suite reactive-auth session) — it
