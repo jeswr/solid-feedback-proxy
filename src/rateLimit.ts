@@ -52,24 +52,17 @@ export class RateLimiter {
     const now = this.now();
     const existing = this.windows.get(key);
     if (existing === undefined || now >= existing.resetAt) {
-      const resetAt = now + this.windowMs;
-      this.windows.set(key, { count: 1, resetAt });
+      this.windows.set(key, { count: 1, resetAt: now + this.windowMs });
       this.sweep(now);
-      return { allowed: true, remaining: this.limit - 1, retryAfterSec: this.toSec(this.windowMs) };
+      return this.freshResult();
     }
     if (existing.count >= this.limit) {
-      return {
-        allowed: false,
-        remaining: 0,
-        retryAfterSec: Math.max(1, this.toSec(existing.resetAt - now)),
-      };
+      return this.overLimitResult(existing, now);
     }
     existing.count += 1;
-    return {
-      allowed: true,
-      remaining: this.limit - existing.count,
-      retryAfterSec: Math.max(1, this.toSec(existing.resetAt - now)),
-    };
+    // `remaining` after incrementing to `count` equals `limit - count` — the same value
+    // peek() reports for this pre-state via `limit - count - 1` before the increment.
+    return this.underLimitResult(this.limit - existing.count, existing, now);
   }
 
   /**
@@ -81,18 +74,35 @@ export class RateLimiter {
     const now = this.now();
     const existing = this.windows.get(key);
     if (existing === undefined || now >= existing.resetAt) {
-      return { allowed: true, remaining: this.limit - 1, retryAfterSec: this.toSec(this.windowMs) };
+      return this.freshResult();
     }
     if (existing.count >= this.limit) {
-      return {
-        allowed: false,
-        remaining: 0,
-        retryAfterSec: Math.max(1, this.toSec(existing.resetAt - now)),
-      };
+      return this.overLimitResult(existing, now);
     }
+    // Read-only: report the allowance that a subsequent take() WOULD leave (one consumed),
+    // without mutating — `limit - count - 1` matches take()'s post-increment `limit - count`.
+    return this.underLimitResult(this.limit - existing.count - 1, existing, now);
+  }
+
+  /** The result for a fresh / expired window: one allowed, a full window until reset. */
+  private freshResult(): RateLimitResult {
+    return { allowed: true, remaining: this.limit - 1, retryAfterSec: this.toSec(this.windowMs) };
+  }
+
+  /** The result for a key that is at/over its limit within the current window. */
+  private overLimitResult(existing: Window, now: number): RateLimitResult {
+    return {
+      allowed: false,
+      remaining: 0,
+      retryAfterSec: Math.max(1, this.toSec(existing.resetAt - now)),
+    };
+  }
+
+  /** The result for a key still under its limit; `remaining` is computed by the caller. */
+  private underLimitResult(remaining: number, existing: Window, now: number): RateLimitResult {
     return {
       allowed: true,
-      remaining: this.limit - existing.count - 1,
+      remaining,
       retryAfterSec: Math.max(1, this.toSec(existing.resetAt - now)),
     };
   }
